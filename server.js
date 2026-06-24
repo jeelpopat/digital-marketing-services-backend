@@ -14,15 +14,34 @@ app.use(express.json()); // Parses incoming JSON requests
 
 // Connect to MongoDB
 
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Validate Mongo config (do not crash app)
+if (!process.env.MONGO_URI || typeof process.env.MONGO_URI !== 'string') {
+  console.error('MONGO_URI is missing/invalid. Backend will run but database writes will fail.');
+}
+
+// Track DB connectivity for nicer API errors
+let isMongoConnected = false;
+
+if (process.env.MONGO_URI && typeof process.env.MONGO_URI === 'string') {
+  mongoose.connect(process.env.MONGO_URI)
+    .then(() => {
+      isMongoConnected = true;
+      console.log('Connected to MongoDB');
+    })
+    .catch(err => {
+      console.error('MongoDB connection error:', err);
+    });
+}
+
 
 // --- API ROUTES ---
 
 // 1. Contact Form API
 app.post('/api/contact', async (req, res) => {
   try {
+    if (!isMongoConnected) {
+      return res.status(503).json({ success: false, message: 'Database not connected. Please try again in a few minutes.' });
+    }
     const { fullName, email, companyName, message } = req.body;
     const newContact = new Contact({ fullName, email, companyName, message });
     await newContact.save();
